@@ -237,7 +237,7 @@ const offB = document.createElement('canvas'); offB.width=W; offB.height=H;
 const ctxB = offB.getContext('2d');
 
 let stageIdx=0, transProgress=1.0, transOldIdx=0;
-const TRANS_SPEED=0.007;
+const TRANS_SPEED=0.004;
 function easeInOut(t){ return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
 
 let state='idle', score=0, hi=0, lives=3;
@@ -430,7 +430,7 @@ function loop(){
     if(curId==='spring'||curId==='beach'||curId==='autumn'){ birds.forEach(b=>{ if(state==='running') b.x-=b.spd*(speed/7); if(b.x+20<0){b.x=W+80+Math.random()*200;b.y=28+Math.random()*85;} b.phase+=.13; const flap=Math.sin(b.phase)*b.sz*.85; ctx.strokeStyle='rgba(30,58,95,.7)'; ctx.lineWidth=1.8; ctx.beginPath(); ctx.moveTo(b.x-b.sz,b.y); ctx.quadraticCurveTo(b.x-b.sz*.4,b.y-flap,b.x,b.y); ctx.quadraticCurveTo(b.x+b.sz*.4,b.y-flap,b.x+b.sz,b.y); ctx.stroke(); }); }
     obstacles.forEach(o=>drawObstacle(o)); drawDust();
     if(abducting){ drawBeam(R.x+R.w/2,ufoY); drawUFO(R.x+R.w/2,ufoY); drawSimon(R.y+simonLiftY); tickAbduction(); if(abductTimer>80&&abductTimer<230&&Math.floor(abductTimer/8)%2===0){ ctx.fillStyle='rgba(52,211,153,.95)'; ctx.font='bold 18px "Courier New"'; ctx.textAlign='center'; ctx.fillText('SIMON DI CULIK ALIEN!! 👽',W/2,H/2+40); ctx.textAlign='left'; } } else { drawSimon(); }
-    if(invincible>55){ ctx.fillStyle=`rgba(239,68,68,${(invincible-55)/20*.28})`; ctx.fillRect(0,0,W,H); }
+    if(invincible>105){ ctx.fillStyle=`rgba(239,68,68,${(invincible-105)/15*.28})`; ctx.fillRect(0,0,W,H); }
     drawPopups(); drawWarnMsg();
     if(transProgress>0&&transProgress<1){ const t=easeInOut(transProgress); ctx.globalAlpha=Math.min(1,t*3); ctx.fillStyle='rgba(255,255,255,.9)'; ctx.font='bold 22px "Courier New"'; ctx.textAlign='center'; ctx.fillText(STAGES[stageIdx].icon+' '+STAGES[stageIdx].name+' STAGE',W/2-((1-t)*80),H*0.14); ctx.textAlign='left'; ctx.globalAlpha=1; }
 
@@ -456,7 +456,7 @@ function loop(){
             const o=obstacles[i]; o.x-=speed;
             if(!o.scored&&o.x+o.w<R.x){ score+=10; o.scored=true; scoreEl.textContent=score.toString().padStart(5,'0'); popups.push({x:R.x+R.w/2,y:R.y-8,val:10,life:1}); }
             if(o.x+o.w<0){obstacles.splice(i,1);continue;}
-            if(hit(o)&&invincible===0){ lives--; updateHearts(); invincible=70; spawnDust(R.x+R.w/2,R.y+R.h/2,'#ef4444',16); showWarning(lives); if(lives<=0){state='gameover';if(score>hi){hi=score;hiEl.textContent=hi.toString().padStart(5,'0');}}}
+            if(hit(o)&&invincible===0){ lives--; updateHearts(); invincible=120; R.rolling=false; R.roll=Math.round(R.roll/(Math.PI*2))*Math.PI*2; R.rollTarget=R.roll; R.sqY=1; R.sqV=0; spawnDust(R.x+R.w/2,R.y+R.h/2,'#ef4444',16); showWarning(lives); if(lives<=0){state='gameover';if(score>hi){hi=score;hiEl.textContent=hi.toString().padStart(5,'0');}}}
         }
     } else if(!abducting){
         for(let i=dust.length-1;i>=0;i--){const p=dust[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.life-=.05;if(p.life<=0)dust.splice(i,1);}
