@@ -456,7 +456,7 @@ function loop(){
             const o=obstacles[i]; o.x-=speed;
             if(!o.scored&&o.x+o.w<R.x){ score+=10; o.scored=true; scoreEl.textContent=score.toString().padStart(5,'0'); popups.push({x:R.x+R.w/2,y:R.y-8,val:10,life:1}); }
             if(o.x+o.w<0){obstacles.splice(i,1);continue;}
-            if(hit(o)&&invincible===0){ lives--; updateHearts(); invincible=120; R.rolling=false; R.roll=Math.round(R.roll/(Math.PI*2))*Math.PI*2; R.rollTarget=R.roll; R.sqY=1; R.sqV=0; spawnDust(R.x+R.w/2,R.y+R.h/2,'#ef4444',16); showWarning(lives); if(lives<=0){state='gameover';if(score>hi){hi=score;hiEl.textContent=hi.toString().padStart(5,'0');}}}
+            if(hit(o)&&invincible===0){ lives--; updateHearts(); invincible=120; spawnDust(R.x+R.w/2,R.y+R.h/2,'#ef4444',16); showWarning(lives); if(lives<=0){state='gameover';if(score>hi){hi=score;hiEl.textContent=hi.toString().padStart(5,'0');}}}
         }
     } else if(!abducting){
         for(let i=dust.length-1;i>=0;i--){const p=dust[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.life-=.05;if(p.life<=0)dust.splice(i,1);}
