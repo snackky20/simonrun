@@ -1,247 +1,863 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIMON RUN - Official Game</title>
-    <style>
-        :root {
-            --bg-color: #121212;
-            --accent-color: #00ff88;
-            --text-color: #ffffff;
-        }
-
-        body { 
-            text-align: center; 
-            font-family: 'Courier New', Courier, monospace; 
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        .container { position: relative; }
-
-        h1 { 
-            margin: 0; 
-            font-size: 3.5rem; 
-            letter-spacing: 8px;
-            color: var(--accent-color);
-            text-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
-        }
-
-        p { opacity: 0.6; margin-bottom: 20px; font-size: 1.1rem; }
-
-        canvas { 
-            background-color: #1e1e1e; 
-            display: block; 
-            border-radius: 15px;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-            border: 2px solid #333;
-        }
-
-        .score-box {
-            position: absolute;
-            top: 25px;
-            left: 25px;
-            font-size: 26px;
-            font-weight: bold;
-            color: var(--accent-color);
-            text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-        }
-
-        kbd {
-            background-color: #333;
-            padding: 4px 10px;
-            border-radius: 5px;
-            border: 1px solid #555;
-            color: var(--accent-color);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIMON RUN</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    background: #0f172a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.wrap { display:flex; flex-direction:column; align-items:center; width:820px; }
+.hud {
+    width:100%; display:flex; justify-content:space-between;
+    align-items:center; padding:0 6px 8px;
+}
+.hud-left { display:flex; align-items:center; gap:8px; }
+.hi-label { font-size:11px; letter-spacing:2px; color:#94a3b8; font-weight:bold; }
+.num { font-size:22px; font-weight:bold; letter-spacing:3px; }
+.num.hi  { color:#94a3b8; }
+.num.cur { color:#e2e8f0; }
+.hearts { display:flex; gap:4px; align-items:center; }
+.heart { font-size:17px; transition:opacity 0.2s; }
+.heart.lost { opacity:0.2; }
+.stage-label { font-size:11px; letter-spacing:2px; color:#94a3b8; margin-left:10px; }
+canvas {
+    display:block; cursor:pointer; border-radius:14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+}
+</style>
 </head>
 <body>
-
-    <div class="container">
-        <h1>SIMON RUN</h1>
-        <p>TAP <kbd>SPACE</kbd> TO JUMP</p>
-        
-        <div class="score-box" id="scoreDisplay">SCORE: 0000</div>
-        <canvas id="gameCanvas"></canvas>
+<div class="wrap">
+    <div class="hud">
+        <div class="hud-left">
+            <span class="hi-label">HI</span>
+            <span class="num hi" id="hiNum">00000</span>
+            <span class="stage-label" id="stageLabel">🌤 DAY</span>
+            <span style="margin-left:10px;font-size:11px;letter-spacing:2px;color:#94a3b8;">LIVES</span>
+            <div class="hearts">
+                <span class="heart" id="h0">❤️</span>
+                <span class="heart" id="h1">❤️</span>
+                <span class="heart" id="h2">❤️</span>
+            </div>
+        </div>
+        <span class="num cur" id="scoreNum">00000</span>
     </div>
+    <canvas id="c" width="820" height="310"></canvas>
+</div>
 
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreDisplay = document.getElementById("scoreDisplay");
+<script>
+const c   = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = c.width, H = c.height;
+const GROUND = 222;
 
-        canvas.width = 850;
-        canvas.height = 350;
+const scoreEl    = document.getElementById('scoreNum');
+const hiEl       = document.getElementById('hiNum');
+const stageLbl   = document.getElementById('stageLabel');
+const heartEls   = [0,1,2].map(i=>document.getElementById('h'+i));
 
-        // --- LOAD GAMBAR SIMON DARI LINK ---
-        const mcImg = new Image();
-        mcImg.crossOrigin = "anonymous"; 
-        mcImg.src = 'https://i.ibb.co/rRfhtkDK/image-1.png'; 
+const simonImg = new Image();
+simonImg.crossOrigin = 'anonymous';
+simonImg.src = 'https://i.ibb.co/rRfhtkDK/image-1.png';
 
-        let score = 0;
-        let gameSpeed = 6.5;
-        let isGameOver = false;
-        let timer = 0;
-        let obstacles = [];
-        let gameActive = false;
-        let rotation = 0; // Untuk efek salto
+// ── Palettes ─────────────────────────────────────────────────────────────────
+const PALS_DAY = [
+    {body:'#16a34a',dark:'#166534',light:'#bbf7d0',spike:'#14532d'},
+    {body:'#b45309',dark:'#92400e',light:'#fef08a',spike:'#78350f'},
+    {body:'#7c3aed',dark:'#4c1d95',light:'#ddd6fe',spike:'#3b0764'},
+    {body:'#0369a1',dark:'#075985',light:'#bae6fd',spike:'#0c4a6e'},
+    {body:'#dc2626',dark:'#991b1b',light:'#fecaca',spike:'#7f1d1d'},
+];
+const PALS_NIGHT = [
+    {body:'#1e3a5f',dark:'#0c2240',light:'#60a5fa',spike:'#1e40af'},
+    {body:'#4c1d95',dark:'#2e1065',light:'#c4b5fd',spike:'#6d28d9'},
+    {body:'#065f46',dark:'#022c22',light:'#6ee7b7',spike:'#047857'},
+    {body:'#7f1d1d',dark:'#450a0a',light:'#fca5a5',spike:'#991b1b'},
+];
+// Space obstacles: asteroids, aliens, UFO debris
+const PALS_SPACE = [
+    {body:'#6b7280',dark:'#374151',light:'#d1d5db',spike:'#9ca3af'},
+    {body:'#7c3aed',dark:'#4c1d95',light:'#c4b5fd',spike:'#5b21b6'},
+    {body:'#0e7490',dark:'#164e63',light:'#67e8f9',spike:'#0891b2'},
+    {body:'#a16207',dark:'#713f12',light:'#fde68a',spike:'#ca8a04'},
+];
 
-        const dino = {
-            x: 100,
-            y: 250,
-            width: 85,
-            height: 85,
-            dy: 0,
-            jumpForce: 15,
-            gravity: 0.8,
-            grounded: false
-        };
+const WARN_MSGS = {2:'HATI-HATI LAH MON',1:'WOI HATI-HATI MON',0:'WOI DARAH LO TINGGAL 1 MON'};
 
-        window.addEventListener("keydown", (e) => {
-            if (e.code === "Space") {
-                if (!gameActive || isGameOver) {
-                    restartGame();
-                } else if (dino.grounded) {
-                    dino.dy = -dino.jumpForce;
-                    dino.grounded = false;
+// ── Stages: 'day' | 'night' | 'space' ────────────────────────────────────────
+// day <-> night alternates every 200 pts. Space at 1000.
+let stage = 'day';
+let stageTransition = 0;   // 0-1, fading between stages
+let transitioning = false;
+let transitionTarget = '';
+let abductionSeq = false;   // alien abduction cutscene flag
+let abductTimer  = 0;
+let ufoY = -120, ufoBeamAlpha = 0, simonLiftY = 0, abductDone = false;
+
+// Stars (used in night + space)
+let stars = [];
+function genStars(n, forSpace){
+    stars = [];
+    for(let i=0;i<n;i++) stars.push({
+        x:Math.random()*W, y:Math.random()*(GROUND+62),
+        r: forSpace ? Math.random()*2.2+0.3 : Math.random()*1.3+0.2,
+        twinkle:Math.random()*Math.PI*2,
+        speed:Math.random()*0.04+0.01,
+        color: forSpace ? ['#ffffff','#a78bfa','#67e8f9','#fde68a'][Math.random()*4|0] : '#fff'
+    });
+}
+genStars(60, false);
+
+// Nebula shapes for space
+let nebulas = [];
+function genNebulas(){
+    nebulas=[];
+    for(let i=0;i<5;i++) nebulas.push({
+        x:Math.random()*W,y:Math.random()*(GROUND+60),
+        r:40+Math.random()*80,
+        color:['rgba(139,92,246,0.12)','rgba(6,182,212,0.1)','rgba(99,102,241,0.1)','rgba(244,114,182,0.09)'][Math.random()*4|0]
+    });
+}
+
+// ── Game state ────────────────────────────────────────────────────────────────
+let state = 'idle';
+let score = 0, hi = 0, lives = 3;
+let speed = 7, gameTimer = 0, frame = 0;
+let obstacles = [], clouds = [], birds = [], dust = [], popups = [];
+let groundX = 0, mountainX = 0;
+let hiFlash = 0, invincible = 0;
+let warnMsg = null;
+let lastStageSwitch = 0; // score at last day/night toggle
+
+const R = {
+    x:85, y:GROUND, w:62, h:62,
+    dy:0, jumps:0, maxJumps:2, grounded:true,
+    sqY:1, sqV:0,
+    roll:0, rollTarget:0, rolling:false,
+    trail:[],
+};
+
+// Floating astronaut dust for space
+let spaceParts = [];
+
+for(let i=0;i<5;i++) spawnCloud(true);
+for(let i=0;i<4;i++) spawnBird(true);
+
+function spawnCloud(init){
+    if(stage==='space') return;
+    const sz=0.5+Math.random()*0.9;
+    clouds.push({
+        x:init?Math.random()*W:W+40+Math.random()*200,
+        y:15+Math.random()*80, w:100*sz, h:38*sz,
+        spd:0.4+Math.random()*0.6,
+        hue: stage==='night'?[220,230,240][Math.random()*3|0]:[200,210,220,195][Math.random()*4|0],
+        alpha:stage==='night'?0.25+Math.random()*0.15:0.82+Math.random()*0.15
+    });
+}
+function spawnBird(init){
+    if(stage==='space'||stage==='night') return;
+    birds.push({
+        x:init?Math.random()*W:W+80+Math.random()*300,
+        y:28+Math.random()*85,
+        spd:0.9+Math.random()*1.3,
+        phase:Math.random()*Math.PI*2,
+        sz:3+Math.random()*3
+    });
+}
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+function action(){
+    if(abductionSeq) return; // lock input during cutscene
+    if(state!=='running'){ startGame(); return; }
+    if(R.jumps<R.maxJumps){
+        R.dy=-16; R.grounded=false; R.jumps++;
+        R.sqY=0.55; R.sqV=0.12;
+        R.rollTarget=Math.round(R.roll/(Math.PI*2))*Math.PI*2+Math.PI*2;
+        R.rolling=true;
+        spawnDust(R.x+R.w/2,R.y+R.h, stage==='space'?'#a78bfa':'#86efac',10);
+    }
+}
+document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();action();}});
+c.addEventListener('click',action);
+c.addEventListener('touchstart',e=>{e.preventDefault();action();},{passive:false});
+
+// ── Start / reset ─────────────────────────────────────────────────────────────
+function startGame(){
+    score=0; speed=7; gameTimer=0; frame=0;
+    obstacles=[]; dust=[]; popups=[]; warnMsg=null;
+    lives=3; invincible=0; updateHearts();
+    R.y=GROUND; R.dy=0; R.jumps=0; R.grounded=true;
+    R.sqY=1; R.sqV=0; R.roll=0; R.rollTarget=0; R.rolling=false; R.trail=[];
+    abductionSeq=false; abductTimer=0; ufoY=-120; ufoBeamAlpha=0; simonLiftY=0; abductDone=false;
+    stage='day'; lastStageSwitch=0; transitioning=false; stageTransition=0;
+    stageLbl.textContent='🌤 DAY';
+    genStars(60,false); clouds=[]; birds=[];
+    for(let i=0;i<5;i++) spawnCloud(true);
+    for(let i=0;i<4;i++) spawnBird(true);
+    scoreEl.textContent='00000';
+    state='running';
+}
+function updateHearts(){ heartEls.forEach((h,i)=>h.className='heart'+(i>=lives?' lost':'')); }
+function showWarning(l){ const m=WARN_MSGS[l]; if(m) warnMsg={text:m,life:1.0}; }
+
+// ── Stage switching ────────────────────────────────────────────────────────────
+function switchStage(to){
+    if(transitioning || stage===to) return;
+    transitioning=true; transitionTarget=to; stageTransition=0;
+    if(to==='space'){
+        genStars(120,true); genNebulas();
+        stageLbl.textContent='🛸 SPACE';
+    } else if(to==='night'){
+        genStars(80,false);
+        stageLbl.textContent='🌙 NIGHT';
+        clouds=[]; birds=[];
+        for(let i=0;i<3;i++) spawnCloud(true);
+    } else {
+        genStars(60,false);
+        stageLbl.textContent='🌤 DAY';
+        clouds=[]; birds=[];
+        for(let i=0;i<5;i++) spawnCloud(true);
+        for(let i=0;i<4;i++) spawnBird(true);
+    }
+}
+
+// ── Alien abduction cutscene ───────────────────────────────────────────────────
+function startAbduction(){
+    abductionSeq=true; abductTimer=0;
+    ufoY=-120; ufoBeamAlpha=0; simonLiftY=0;
+    // pause obstacles moving
+}
+
+function tickAbduction(){
+    abductTimer++;
+    // Phase 1 (0-80): UFO descends from top
+    if(abductTimer<80){
+        ufoY = -120 + (abductTimer/80)*(GROUND - 100 + 120);
+    }
+    // Phase 2 (80-140): beam appears
+    if(abductTimer>=80&&abductTimer<140){
+        ufoBeamAlpha = (abductTimer-80)/60;
+    }
+    // Phase 3 (140-220): Simon levitates up
+    if(abductTimer>=140&&abductTimer<220){
+        simonLiftY = ((abductTimer-140)/80) * (ufoY+80 - GROUND);
+    }
+    // Phase 4 (220-280): UFO + Simon fly off top
+    if(abductTimer>=220&&abductTimer<280){
+        const t=(abductTimer-220)/60;
+        ufoY -= 6; simonLiftY = (ufoY+80 - GROUND);
+    }
+    // Phase 5 (280+): switch to space
+    if(abductTimer>=280 && !abductDone){
+        abductDone=true;
+        stage='space';
+        switchStage('space');
+        abductionSeq=false;
+        R.y=GROUND; R.dy=0; simonLiftY=0; R.jumps=0; R.grounded=true;
+    }
+}
+
+function drawUFO(ux, uy){
+    // Glow
+    ctx.shadowColor='#34d399'; ctx.shadowBlur=30;
+    // Body saucer
+    ctx.fillStyle='#9ca3af';
+    ctx.beginPath(); ctx.ellipse(ux,uy+12,60,18,0,0,Math.PI*2); ctx.fill();
+    // Dome
+    ctx.fillStyle='#d1fae5';
+    ctx.beginPath(); ctx.ellipse(ux,uy,28,20,0,Math.PI,Math.PI*2); ctx.fill();
+    // Dome glass tint
+    ctx.fillStyle='rgba(52,211,153,0.35)';
+    ctx.beginPath(); ctx.ellipse(ux,uy,28,20,0,Math.PI,Math.PI*2); ctx.fill();
+    // Lights
+    const lightColors=['#f87171','#fbbf24','#34d399','#60a5fa'];
+    for(let i=0;i<4;i++){
+        const lx=ux-45+i*30, ly=uy+18;
+        ctx.fillStyle=lightColors[i];
+        ctx.beginPath(); ctx.arc(lx,ly,5,0,Math.PI*2); ctx.fill();
+    }
+    ctx.shadowBlur=0;
+}
+
+function drawBeam(ux,uy){
+    if(ufoBeamAlpha<=0) return;
+    const g=ctx.createLinearGradient(0,uy+20,0,GROUND+62);
+    g.addColorStop(0,`rgba(52,211,153,${ufoBeamAlpha*0.5})`);
+    g.addColorStop(1,'rgba(52,211,153,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.moveTo(ux-30,uy+20);
+    ctx.lineTo(ux-55,GROUND+62);
+    ctx.lineTo(ux+55,GROUND+62);
+    ctx.lineTo(ux+30,uy+20);
+    ctx.closePath(); ctx.fill();
+}
+
+// ── Obstacle spawn ─────────────────────────────────────────────────────────────
+function spawnObstacle(){
+    let pal;
+    if(stage==='space') pal=PALS_SPACE[Math.random()*PALS_SPACE.length|0];
+    else if(stage==='night') pal=PALS_NIGHT[Math.random()*PALS_NIGHT.length|0];
+    else pal=PALS_DAY[Math.random()*PALS_DAY.length|0];
+
+    const shapes=[{w:22,h:52},{w:22,h:72},{w:22,h:90},{w:44,h:52},{w:44,h:72}];
+    const s=shapes[Math.random()*shapes.length|0];
+    const count=score>10&&Math.random()>0.58?2:1;
+    let ox=W+30;
+    for(let i=0;i<count;i++){
+        obstacles.push({x:ox,y:GROUND+R.h-s.h,w:s.w,h:s.h,scored:false,pal,
+            isAsteroid: stage==='space'});
+        ox+=s.w+20;
+    }
+}
+
+function spawnDust(x,y,color,n){
+    for(let i=0;i<n;i++) dust.push({
+        x:x+(Math.random()-.5)*24,y,
+        vx:(Math.random()-.5)*3,vy:-Math.random()*3-0.5,
+        life:1,r:3+Math.random()*5,color
+    });
+}
+
+function hit(o){
+    const px=14,pt=10;
+    return R.x+px<o.x+o.w&&R.x+R.w-px>o.x&&R.y+pt<o.y+o.h&&R.y+R.h-5>o.y;
+}
+
+function lerpColor(a,b,t){
+    const ah=parseInt(a.slice(1),16),bh=parseInt(b.slice(1),16);
+    const ar=(ah>>16)&0xff,ag=(ah>>8)&0xff,ab=ah&0xff;
+    const br=(bh>>16)&0xff,bg=(bh>>8)&0xff,bb=bh&0xff;
+    return '#'+[ar+(br-ar)*t,ag+(bg-ag)*t,ab+(bb-ab)*t]
+        .map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+}
+
+// ── DRAW BACKGROUNDS ─────────────────────────────────────────────────────────
+
+function drawDay(){
+    const g=ctx.createLinearGradient(0,0,0,GROUND+R.h);
+    g.addColorStop(0,'#5ba4d4'); g.addColorStop(1,'#bae6fd');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // Sun
+    ctx.shadowColor='#fde047'; ctx.shadowBlur=28;
+    ctx.fillStyle='#fef08a';
+    ctx.beginPath(); ctx.arc(W-72,52,32,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle='rgba(253,224,71,0.4)'; ctx.lineWidth=2;
+    for(let a=0;a<8;a++){
+        const ang=a*Math.PI/4+frame*0.004;
+        ctx.beginPath();
+        ctx.moveTo(W-72+Math.cos(ang)*40,52+Math.sin(ang)*40);
+        ctx.lineTo(W-72+Math.cos(ang)*58,52+Math.sin(ang)*58);
+        ctx.stroke();
+    }
+}
+
+function drawNight(){
+    const g=ctx.createLinearGradient(0,0,0,GROUND+R.h);
+    g.addColorStop(0,'#0f172a'); g.addColorStop(0.6,'#1e1b4b'); g.addColorStop(1,'#312e81');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // Moon
+    ctx.shadowColor='#e0e7ff'; ctx.shadowBlur=24;
+    ctx.fillStyle='#e0e7ff';
+    ctx.beginPath(); ctx.arc(W-72,52,28,0,Math.PI*2); ctx.fill();
+    // Moon crater shadow
+    ctx.fillStyle='rgba(100,116,139,0.35)';
+    ctx.beginPath(); ctx.arc(W-58,44,18,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+}
+
+function drawSpace(){
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#020617'); g.addColorStop(0.5,'#0a0a2e'); g.addColorStop(1,'#0f0a1e');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // Nebulas
+    nebulas.forEach(n=>{
+        n.x -= speed*0.04;
+        if(n.x+n.r<0){ n.x=W+n.r; n.y=Math.random()*(GROUND+60); }
+        ctx.fillStyle=n.color;
+        ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fill();
+    });
+}
+
+function drawStars(){
+    stars.forEach(s=>{
+        s.twinkle+=s.speed;
+        if(state==='running') s.x -= speed*(stage==='space'?0.08:0.03);
+        if(s.x<0) s.x=W+5;
+        const a=0.3+Math.sin(s.twinkle)*0.6;
+        ctx.fillStyle=s.color||'#fff';
+        ctx.globalAlpha=Math.max(0.1,a);
+        ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha=1;
+}
+
+function drawMountainsDay(){
+    ctx.fillStyle='#93c5fd';
+    const m1=mountainX%260;
+    for(let x=-m1-260;x<W+260;x+=260){
+        ctx.beginPath();
+        ctx.moveTo(x,GROUND+R.h); ctx.lineTo(x+60,GROUND+R.h-90);
+        ctx.lineTo(x+130,GROUND+R.h-52); ctx.lineTo(x+200,GROUND+R.h-105);
+        ctx.lineTo(x+260,GROUND+R.h); ctx.closePath(); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,0.45)';
+        ctx.beginPath(); ctx.moveTo(x+186,GROUND+R.h-80); ctx.lineTo(x+200,GROUND+R.h-105); ctx.lineTo(x+214,GROUND+R.h-80); ctx.closePath(); ctx.fill();
+        ctx.fillStyle='#93c5fd';
+    }
+    ctx.fillStyle='#6ee7b7';
+    const m2=(mountainX*1.7)%340;
+    for(let x=-m2-340;x<W+340;x+=340){
+        ctx.beginPath();
+        ctx.moveTo(x,GROUND+R.h);
+        ctx.bezierCurveTo(x+60,GROUND+R.h,x+70,GROUND+R.h-65,x+120,GROUND+R.h-65);
+        ctx.bezierCurveTo(x+170,GROUND+R.h-65,x+180,GROUND+R.h-40,x+230,GROUND+R.h-40);
+        ctx.bezierCurveTo(x+280,GROUND+R.h-40,x+290,GROUND+R.h-75,x+340,GROUND+R.h-75);
+        ctx.lineTo(x+340,GROUND+R.h); ctx.closePath(); ctx.fill();
+    }
+}
+
+function drawMountainsNight(){
+    ctx.fillStyle='#1e1b4b';
+    const m1=mountainX%260;
+    for(let x=-m1-260;x<W+260;x+=260){
+        ctx.beginPath();
+        ctx.moveTo(x,GROUND+R.h); ctx.lineTo(x+60,GROUND+R.h-90);
+        ctx.lineTo(x+130,GROUND+R.h-52); ctx.lineTo(x+200,GROUND+R.h-105);
+        ctx.lineTo(x+260,GROUND+R.h); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle='#0f172a';
+    const m2=(mountainX*1.7)%340;
+    for(let x=-m2-340;x<W+340;x+=340){
+        ctx.beginPath();
+        ctx.moveTo(x,GROUND+R.h);
+        ctx.bezierCurveTo(x+60,GROUND+R.h,x+70,GROUND+R.h-65,x+120,GROUND+R.h-65);
+        ctx.bezierCurveTo(x+170,GROUND+R.h-65,x+180,GROUND+R.h-40,x+230,GROUND+R.h-40);
+        ctx.bezierCurveTo(x+280,GROUND+R.h-40,x+290,GROUND+R.h-75,x+340,GROUND+R.h-75);
+        ctx.lineTo(x+340,GROUND+R.h); ctx.closePath(); ctx.fill();
+    }
+}
+
+function drawSpacePlatform(){
+    // Space "ground" - floating platform look
+    ctx.fillStyle='#1e1b4b';
+    ctx.fillRect(0,GROUND+R.h,W,16);
+    ctx.fillStyle='#312e81';
+    ctx.fillRect(0,GROUND+R.h,W,4);
+    // Glowing edge
+    const eg=ctx.createLinearGradient(0,GROUND+R.h,0,GROUND+R.h+16);
+    eg.addColorStop(0,'rgba(139,92,246,0.4)'); eg.addColorStop(1,'transparent');
+    ctx.fillStyle=eg; ctx.fillRect(0,GROUND+R.h,W,16);
+    // Scrolling grid lines
+    ctx.strokeStyle='rgba(139,92,246,0.2)'; ctx.lineWidth=1;
+    const goff=groundX%60;
+    for(let x=-goff;x<W+10;x+=60){
+        ctx.beginPath(); ctx.moveTo(x,GROUND+R.h); ctx.lineTo(x,GROUND+R.h+16); ctx.stroke();
+    }
+    // Deep space floor
+    const dg=ctx.createLinearGradient(0,GROUND+R.h+16,0,H);
+    dg.addColorStop(0,'#0a0a2e'); dg.addColorStop(1,'#020617');
+    ctx.fillStyle=dg; ctx.fillRect(0,GROUND+R.h+16,W,H);
+    // Floating planets in background
+    ctx.fillStyle='rgba(99,102,241,0.18)';
+    ctx.beginPath(); ctx.arc(120,H-40,35,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(244,114,182,0.12)';
+    ctx.beginPath(); ctx.arc(600,H-55,50,0,Math.PI*2); ctx.fill();
+}
+
+function drawGroundDay(){
+    ctx.fillStyle='#4ade80'; ctx.fillRect(0,GROUND+R.h,W,14);
+    ctx.fillStyle='#16a34a'; ctx.fillRect(0,GROUND+R.h,W,3);
+    const dg=ctx.createLinearGradient(0,GROUND+R.h+14,0,H);
+    dg.addColorStop(0,'#a16207'); dg.addColorStop(1,'#78350f');
+    ctx.fillStyle=dg; ctx.fillRect(0,GROUND+R.h+14,W,H);
+    ctx.fillStyle='#22c55e';
+    const off=groundX%70;
+    for(let x=-off;x<W+20;x+=70){
+        ctx.beginPath(); ctx.moveTo(x+4,GROUND+R.h); ctx.lineTo(x+10,GROUND+R.h-10); ctx.lineTo(x+16,GROUND+R.h); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x+44,GROUND+R.h); ctx.lineTo(x+50,GROUND+R.h-7); ctx.lineTo(x+56,GROUND+R.h); ctx.fill();
+    }
+    ctx.fillStyle='#92400e';
+    const po=groundX%95;
+    for(let x=-po;x<W+20;x+=95){
+        ctx.beginPath(); ctx.ellipse(x+18,GROUND+R.h+22,7,4,0,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x+65,GROUND+R.h+30,5,3,0,0,Math.PI*2); ctx.fill();
+    }
+}
+
+function drawGroundNight(){
+    ctx.fillStyle='#14532d'; ctx.fillRect(0,GROUND+R.h,W,14);
+    ctx.fillStyle='#166534'; ctx.fillRect(0,GROUND+R.h,W,3);
+    const dg=ctx.createLinearGradient(0,GROUND+R.h+14,0,H);
+    dg.addColorStop(0,'#292524'); dg.addColorStop(1,'#1c1917');
+    ctx.fillStyle=dg; ctx.fillRect(0,GROUND+R.h+14,W,H);
+    ctx.fillStyle='#15803d';
+    const off=groundX%70;
+    for(let x=-off;x<W+20;x+=70){
+        ctx.beginPath(); ctx.moveTo(x+4,GROUND+R.h); ctx.lineTo(x+10,GROUND+R.h-10); ctx.lineTo(x+16,GROUND+R.h); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x+44,GROUND+R.h); ctx.lineTo(x+50,GROUND+R.h-7); ctx.lineTo(x+56,GROUND+R.h); ctx.fill();
+    }
+}
+
+function drawCloud(cl){
+    ctx.fillStyle=`hsla(${cl.hue},${stage==='night'?40:75}%,${stage==='night'?60:93}%,${cl.alpha})`;
+    ctx.beginPath();
+    ctx.arc(cl.x+cl.w*.22,cl.y+cl.h*.65,cl.w*.2,0,Math.PI*2);
+    ctx.arc(cl.x+cl.w*.5,cl.y+cl.h*.3,cl.w*.28,0,Math.PI*2);
+    ctx.arc(cl.x+cl.w*.78,cl.y+cl.h*.65,cl.w*.18,0,Math.PI*2);
+    ctx.rect(cl.x+cl.w*.05,cl.y+cl.h*.5,cl.w*.9,cl.h*.6);
+    ctx.fill();
+}
+
+function drawBird(b){
+    b.phase+=0.13;
+    const flap=Math.sin(b.phase)*b.sz*0.85;
+    ctx.strokeStyle='rgba(30,58,95,0.7)'; ctx.lineWidth=1.8;
+    ctx.beginPath();
+    ctx.moveTo(b.x-b.sz,b.y); ctx.quadraticCurveTo(b.x-b.sz*.4,b.y-flap,b.x,b.y);
+    ctx.quadraticCurveTo(b.x+b.sz*.4,b.y-flap,b.x+b.sz,b.y); ctx.stroke();
+}
+
+function drawAsteroid(o){
+    const p=o.pal, cx=o.x+o.w/2, cy=o.y+o.h/2;
+    // Glow
+    ctx.shadowColor=p.light; ctx.shadowBlur=10;
+    ctx.fillStyle=p.body;
+    // Jagged rock shape
+    ctx.beginPath();
+    const pts=7, baseR=Math.min(o.w,o.h)/2;
+    for(let i=0;i<pts;i++){
+        const ang=i/pts*Math.PI*2;
+        const r=baseR*(0.7+Math.sin(ang*3+o.x)*0.3);
+        i===0?ctx.moveTo(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r)
+            :ctx.lineTo(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle=p.light+'44';
+    ctx.beginPath(); ctx.ellipse(cx-baseR*.2,cy-baseR*.2,baseR*.3,baseR*.2,-0.5,0,Math.PI*2); ctx.fill();
+}
+
+function drawCactus(o){
+    if(o.isAsteroid){ drawAsteroid(o); return; }
+    const p=o.pal,cx=o.x+o.w/2;
+    ctx.fillStyle='rgba(0,0,0,0.12)';
+    ctx.beginPath(); ctx.ellipse(cx,GROUND+R.h+4,o.w*.65,5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=p.body;
+    ctx.beginPath(); ctx.roundRect(cx-5,o.y,10,o.h,3); ctx.fill();
+    ctx.fillStyle=p.light+'88'; ctx.fillRect(cx-2,o.y+5,3,o.h-10);
+    if(o.h>=55){
+        const ay=o.y+o.h*0.3;
+        ctx.fillStyle=p.body;
+        ctx.beginPath(); ctx.roundRect(o.x,ay,o.w*.4-4,8,3); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(o.x,ay-22,8,24,3); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(cx+5,ay,o.w*.4-4,8,3); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(o.x+o.w-8,ay-18,8,20,3); ctx.fill();
+        ctx.fillStyle=p.light+'66';
+        ctx.fillRect(o.x+2,ay-20,3,18); ctx.fillRect(o.x+o.w-6,ay-16,3,14);
+    }
+    ctx.fillStyle=p.spike;
+    for(let sy=o.y+10;sy<o.y+o.h-8;sy+=15){
+        ctx.beginPath(); ctx.moveTo(cx-5,sy); ctx.lineTo(cx-13,sy+5); ctx.lineTo(cx-5,sy+6); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+5,sy); ctx.lineTo(cx+13,sy+5); ctx.lineTo(cx+5,sy+6); ctx.fill();
+    }
+}
+
+function drawSimon(overrideY){
+    const ry = overrideY !== undefined ? overrideY : R.y;
+    const dist=GROUND-(ry+R.h);
+    if(dist>-5){
+        const sa=Math.max(0,1-dist/160)*0.3;
+        const sr=(R.w/2)*(0.7+0.3*(1-Math.min(1,dist/150)));
+        ctx.fillStyle=`rgba(0,0,0,${sa})`;
+        ctx.beginPath(); ctx.ellipse(R.x+R.w/2,GROUND+R.h+2,sr,5,0,0,Math.PI*2); ctx.fill();
+    }
+    if(invincible>0&&Math.floor(invincible/4)%2===1) ctx.globalAlpha=0.35;
+    // Trail
+    R.trail.forEach((t,i)=>{
+        ctx.globalAlpha=(i/R.trail.length)*0.14*(invincible>0&&Math.floor(invincible/4)%2===1?0.35:1);
+        ctx.save();
+        ctx.translate(t.x+R.w/2,t.y+R.h/2);
+        ctx.rotate(t.roll);
+        if(simonImg.complete&&simonImg.naturalWidth>0)
+            ctx.drawImage(simonImg,-R.w/2,-R.h/2,R.w,R.h);
+        ctx.restore();
+    });
+    ctx.globalAlpha=(invincible>0&&Math.floor(invincible/4)%2===1)?0.35:1;
+    ctx.save();
+    ctx.translate(R.x+R.w/2,ry+R.h/2);
+    ctx.rotate(R.roll);
+    ctx.scale(1+(1-R.sqY)*0.35,R.sqY);
+    if(simonImg.complete&&simonImg.naturalWidth>0)
+        ctx.drawImage(simonImg,-R.w/2,-R.h/2,R.w,R.h);
+    else{
+        ctx.fillStyle='#334155';
+        ctx.beginPath(); ctx.roundRect(-R.w/2,-R.h/2,R.w,R.h,6); ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha=1;
+}
+
+function drawDust(){
+    dust.forEach(p=>{
+        ctx.fillStyle=p.color+Math.floor(p.life*200).toString(16).padStart(2,'0');
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2); ctx.fill();
+    });
+}
+
+function drawPopups(){
+    popups.forEach(p=>{
+        ctx.globalAlpha=p.life;
+        ctx.fillStyle=stage==='space'?'#a78bfa':'#16a34a';
+        ctx.font='bold 15px "Courier New"';
+        ctx.textAlign='center';
+        ctx.fillText('+'+p.val,p.x,p.y);
+    });
+    ctx.globalAlpha=1; ctx.textAlign='left';
+}
+
+function drawWarnMsg(){
+    if(!warnMsg) return;
+    const l=warnMsg.life;
+    const sc=l>0.8?0.5+(1-l)/0.2*0.6:l<0.25?l/0.25:1.1;
+    ctx.save();
+    ctx.globalAlpha=Math.min(1,l*3);
+    ctx.translate(W/2,H/2-20);
+    ctx.scale(sc,sc);
+    ctx.font='bold 20px "Courier New"';
+    const tw=ctx.measureText(warnMsg.text).width;
+    const pw=tw+48,ph=52;
+    ctx.fillStyle='rgba(220,38,38,0.9)';
+    ctx.beginPath(); ctx.roundRect(-pw/2,-ph/2,pw,ph,14); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.fillStyle='#fff';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(warnMsg.text,0,0);
+    ctx.restore();
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
+}
+
+function drawStageBanner(){
+    if(!transitioning) return;
+    stageTransition=Math.min(1,stageTransition+0.03);
+    // Flash overlay
+    const alpha = stageTransition<0.5 ? stageTransition*2 : (1-stageTransition)*2;
+    ctx.fillStyle=stage==='night'?`rgba(15,23,42,${alpha*0.85})`
+                  :stage==='space'?`rgba(2,6,23,${alpha*0.9})`
+                  :`rgba(186,230,253,${alpha*0.7})`;
+    ctx.fillRect(0,0,W,H);
+    if(stageTransition>=1) transitioning=false;
+}
+
+function drawHitFlash(){
+    if(invincible>55){
+        ctx.fillStyle=`rgba(239,68,68,${(invincible-55)/20*0.28})`;
+        ctx.fillRect(0,0,W,H);
+    }
+}
+
+function drawGameOver(){
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(15,23,42,0.96)';
+    ctx.beginPath(); ctx.roundRect(W/2-210,H/2-70,420,150,18); ctx.fill();
+    ctx.strokeStyle='#dc2626'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(W/2-210,H/2-70,420,150,18); ctx.stroke();
+    ctx.fillStyle='#dc2626';
+    ctx.font='bold 30px "Courier New"';
+    ctx.textAlign='center';
+    ctx.fillText('MATI LO MON! 💀',W/2,H/2-24);
+    ctx.fillStyle='#94a3b8';
+    ctx.font='13px "Courier New"';
+    ctx.fillText('SCORE: '+score.toString().padStart(5,'0')+'   BEST: '+hi.toString().padStart(5,'0'),W/2,H/2+10);
+    ctx.fillStyle='#dc2626';
+    ctx.beginPath(); ctx.roundRect(W/2-62,H/2+28,124,40,10); ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.font='bold 14px "Courier New"';
+    ctx.fillText('▶  RESTART',W/2,H/2+53);
+    ctx.textAlign='left';
+}
+
+function drawIdleText(){
+    ctx.fillStyle='rgba(15,23,42,0.88)';
+    ctx.beginPath(); ctx.roundRect(W/2-215,H/2-26,430,52,12); ctx.fill();
+    ctx.fillStyle='#60a5fa';
+    ctx.font='bold 14px "Courier New"';
+    ctx.textAlign='center';
+    ctx.fillText('PRESS  SPACE  OR  TAP  TO  START',W/2,H/2+7);
+    ctx.textAlign='left';
+}
+
+// ── Abduction scene draw ──────────────────────────────────────────────────────
+function drawAbductionScene(){
+    // Draw Simon being lifted
+    const currentY = R.y + simonLiftY;
+    drawSimon(currentY);
+    // UFO
+    drawBeam(R.x+R.w/2, ufoY);
+    drawUFO(R.x+R.w/2, ufoY);
+    // Message
+    if(abductTimer>80&&abductTimer<220){
+        const blink=Math.floor(abductTimer/8)%2===0;
+        if(blink){
+            ctx.fillStyle='rgba(52,211,153,0.95)';
+            ctx.font='bold 18px "Courier New"';
+            ctx.textAlign='center';
+            ctx.fillText('SIMON DI CULIK ALIEN!! 👽',W/2,H/2+40);
+            ctx.textAlign='left';
+        }
+    }
+}
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+function loop(){
+    frame++;
+
+    // ── Draw background based on stage ───────────────────────────────────────
+    if(stage==='day')        drawDay();
+    else if(stage==='night') drawNight();
+    else                     drawSpace();
+
+    // Stars (night + space)
+    if(stage!=='day') drawStars();
+
+    // Mountains / platforms
+    if(stage==='day')        drawMountainsDay();
+    else if(stage==='night') drawMountainsNight();
+
+    // Clouds / birds
+    for(let i=clouds.length-1;i>=0;i--){
+        if(state==='running') clouds[i].x-=clouds[i].spd*(speed/7);
+        if(clouds[i].x+clouds[i].w<0){ clouds.splice(i,1); spawnCloud(false); continue; }
+        drawCloud(clouds[i]);
+    }
+    birds.forEach(b=>{
+        if(state==='running') b.x-=b.spd*(speed/7);
+        if(b.x+20<0){ b.x=W+80+Math.random()*200; b.y=28+Math.random()*85; }
+        drawBird(b);
+    });
+
+    // Ground
+    if(stage==='day')        drawGroundDay();
+    else if(stage==='night') drawGroundNight();
+    else                     drawSpacePlatform();
+
+    obstacles.forEach(o=>drawCactus(o));
+    drawDust();
+
+    // ── Abduction cutscene ───────────────────────────────────────────────────
+    if(abductionSeq){
+        drawAbductionScene();
+        tickAbduction();
+    } else {
+        drawSimon();
+    }
+
+    drawHitFlash();
+    drawPopups();
+    drawWarnMsg();
+    drawStageBanner();
+
+    if(state==='running' && !abductionSeq){
+        gameTimer++;
+        groundX+=speed;
+        mountainX+=speed*0.13;
+
+        // Physics
+        R.dy+=0.82; R.y+=R.dy;
+
+        // Roll
+        if(R.rolling){
+            const rem=R.rollTarget-R.roll;
+            if(rem>0.01){ R.roll+=Math.max(0.04,rem*0.10); if(R.roll>=R.rollTarget) R.roll=R.rollTarget; }
+        }
+        // Squash
+        R.sqY+=R.sqV; R.sqV+=(1-R.sqY)*0.28; R.sqV*=0.62;
+        if(R.sqY>1.35) R.sqY=1.35; if(R.sqY<0.5) R.sqY=0.5;
+        // Trail
+        if(!R.grounded){ R.trail.push({x:R.x,y:R.y,roll:R.roll}); if(R.trail.length>5) R.trail.shift(); }
+        else if(R.trail.length>0) R.trail.shift();
+        // Landing
+        if(R.y>=GROUND){
+            const wasAir=!R.grounded;
+            if(wasAir&&R.dy>3){ R.sqY=1.28; R.sqV=-0.09; spawnDust(R.x+R.w/2,GROUND+R.h,stage==='space'?'#a78bfa':'#4ade80',8); }
+            R.roll=Math.round(R.roll/(Math.PI*2))*Math.PI*2;
+            R.rollTarget=R.roll; R.rolling=false;
+            R.y=GROUND; R.dy=0; R.grounded=true; R.jumps=0;
+        }
+
+        // Dust / popups
+        for(let i=dust.length-1;i>=0;i--){ const p=dust[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.life-=0.05; if(p.life<=0) dust.splice(i,1); }
+        for(let i=popups.length-1;i>=0;i--){ const p=popups[i]; p.y-=1.2; p.life-=0.03; if(p.life<=0) popups.splice(i,1); }
+        if(warnMsg){ warnMsg.life-=0.012; if(warnMsg.life<=0) warnMsg=null; }
+        if(invincible>0) invincible--;
+
+        // Spawn
+        const interval=Math.max(38,88-score*0.5);
+        if(gameTimer%(interval|0)===0) spawnObstacle();
+        speed=Math.min(22,7+score*0.028);
+
+        // ── Score-based stage switching ───────────────────────────────────────
+        // At 1000: trigger abduction
+        if(score>=1000 && stage!=='space' && !abductionSeq && !abductDone){
+            startAbduction(); state='running';
+        }
+        // Every 200 pts toggle day/night (only before space)
+        if(score>0 && score%200===0 && score!==lastStageSwitch && stage!=='space' && !abductionSeq){
+            lastStageSwitch=score;
+            const next = stage==='day' ? 'night' : 'day';
+            stage=next;
+            switchStage(next);
+            obstacles=[];
+        }
+
+        // Obstacles
+        for(let i=obstacles.length-1;i>=0;i--){
+            const o=obstacles[i];
+            o.x-=speed;
+            if(!o.scored&&o.x+o.w<R.x){
+                score++; o.scored=true;
+                scoreEl.textContent=score.toString().padStart(5,'0');
+                if(score%100===0) hiFlash=32;
+                popups.push({x:R.x+R.w/2,y:R.y-8,val:1,life:1});
+            }
+            if(o.x+o.w<0){ obstacles.splice(i,1); continue; }
+            if(hit(o)&&invincible===0){
+                lives--; updateHearts(); invincible=70;
+                spawnDust(R.x+R.w/2,R.y+R.h/2,'#ef4444',16);
+                showWarning(lives);
+                if(lives<=0){
+                    state='gameover';
+                    if(score>hi){ hi=score; hiEl.textContent=hi.toString().padStart(5,'0'); hiFlash=40; }
                 }
             }
-        });
-
-        function spawnObstacle() {
-            let h = Math.random() * (80 - 40) + 40;
-            obstacles.push({
-                x: canvas.width,
-                y: canvas.height - h - 15,
-                width: 30,
-                height: h,
-                color: "#ff3e3e"
-            });
         }
+    } else if(!abductionSeq) {
+        for(let i=dust.length-1;i>=0;i--){ const p=dust[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.life-=0.05; if(p.life<=0) dust.splice(i,1); }
+        mountainX+=speed*0.04;
+        if(warnMsg){ warnMsg.life-=0.012; if(warnMsg.life<=0) warnMsg=null; }
+    }
 
-        function restartGame() {
-            score = 0;
-            obstacles = [];
-            gameSpeed = 6.5;
-            timer = 0;
-            dino.y = canvas.height - dino.height - 15;
-            dino.dy = 0;
-            rotation = 0;
-            isGameOver = false;
-            gameActive = true;
-            update();
-        }
+    if(hiFlash>0){ hiFlash--; hiEl.style.color=hiFlash%6<3?'#60a5fa':'#94a3b8'; }
+    else hiEl.style.color='#94a3b8';
 
-        function drawGround() {
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(0, canvas.height - 15);
-            ctx.lineTo(canvas.width, canvas.height - 15);
-            ctx.stroke();
-        }
+    if(state==='idle')     drawIdleText();
+    if(state==='gameover') drawGameOver();
 
-        function update() {
-            if (isGameOver) {
-                ctx.fillStyle = "rgba(0,0,0,0.8)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = "#00ff88";
-                ctx.font = "bold 45px Courier New";
-                ctx.textAlign = "center";
-                ctx.fillText("SIMON TERJUNGKAL!", canvas.width/2, canvas.height/2 - 20);
-                ctx.fillStyle = "white";
-                ctx.font = "20px Courier New";
-                ctx.fillText("PRESS SPACE TO TRY AGAIN", canvas.width/2, canvas.height/2 + 40);
-                ctx.textAlign = "start";
-                return;
-            }
+    requestAnimationFrame(loop);
+}
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGround();
-
-            // Fisika & Rotasi
-            dino.dy += dino.gravity;
-            dino.y += dino.dy;
-
-            if (!dino.grounded) {
-                rotation += 0.15; // Efek muter pas lompat
-            } else {
-                rotation = 0;
-            }
-
-            if (dino.y + dino.height > canvas.height - 15) {
-                dino.y = canvas.height - dino.height - 15;
-                dino.dy = 0;
-                dino.grounded = true;
-            }
-
-            // Gambar Simon dengan Rotasi
-            ctx.save();
-            ctx.translate(dino.x + dino.width/2, dino.y + dino.height/2);
-            ctx.rotate(rotation);
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.drawImage(mcImg, -dino.width/2, -dino.height/2, dino.width, dino.height);
-            ctx.restore();
-
-            // Spawn Obstacles
-            timer++;
-            if (timer % 75 === 0) {
-                spawnObstacle();
-                if(gameSpeed < 20) gameSpeed += 0.25;
-            }
-
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                let o = obstacles[i];
-                o.x -= gameSpeed;
-
-                // Render Obstacle (Neon Glow)
-                ctx.fillStyle = o.color;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = o.color;
-                ctx.fillRect(o.x, o.y, o.width, o.height);
-                ctx.shadowBlur = 0;
-
-                // Deteksi Tabrakan (Hitbox yang lebih presisi)
-                if (
-                    dino.x + 20 < o.x + o.width &&
-                    dino.x + dino.width - 20 > o.x &&
-                    dino.y + 20 < o.y + o.height &&
-                    dino.y + dino.height > o.y
-                ) {
-                    isGameOver = true;
-                }
-
-                if (o.x + o.width < 0) {
-                    obstacles.splice(i, 1);
-                    score += 10;
-                    scoreDisplay.innerText = "SCORE: " + score.toString().padStart(4, '0');
-                }
-            }
-
-            requestAnimationFrame(update);
-        }
-
-        // Tampilan Awal
-        mcImg.onload = () => {
-            ctx.fillStyle = "#1e1e1e";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(mcImg, dino.x, canvas.height - dino.height - 15, dino.width, dino.height);
-            drawGround();
-            ctx.fillStyle = "#00ff88";
-            ctx.font = "24px Courier New";
-            ctx.textAlign = "center";
-            ctx.fillText("READY, SIMON?", canvas.width/2, canvas.height/2);
-        };
-    </script>
+loop();
+</script>
 </body>
 </html>
