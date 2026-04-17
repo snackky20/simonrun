@@ -238,6 +238,7 @@ const ctxB = offB.getContext('2d');
 
 let stageIdx=0, transProgress=1.0, transOldIdx=0;
 const TRANS_SPEED=0.004;
+let pendingScene=null;
 function easeInOut(t){ return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
 
 let state='idle', score=0, hi=0, lives=3;
@@ -305,10 +306,35 @@ function showWarning(l){ const m=WARN_MSGS[l]; if(m) warnMsg={text:m,life:1.0}; 
 function triggerTransition(newIdx){
     if(newIdx>=STAGES.length) return;
     if(newIdx===5){ startAbduction(); return; }
-    // Snapshot the CURRENT stage into offA RIGHT NOW before anything changes
+
+    // 1. Freeze current (old) stage into offA right now
     renderBg(ctxA, STAGES[stageIdx].id, mountainX, groundX);
+
+    // 2. Build new stage scene data into temp variables
+    const newId = STAGES[newIdx].id;
+    const savedClouds=clouds, savedBirds=birds, savedLeaves=leaves,
+          savedSnow=snowflakes, savedStars=stars, savedNebulas=nebulas;
+
+    // init new stage data (modifies globals)
+    initSceneElements(newId);
+
+    // 3. Render new stage fully into offB using the freshly initialized globals
+    renderBg(ctxB, newId, mountainX, groundX);
+
+    // 4. Restore old stage scene data so it keeps animating until transition done
+    //    (we'll swap to new data when transition completes)
+    const newClouds=clouds, newBirds=birds, newLeaves=leaves,
+          newSnow=snowflakes, newStars=stars, newNebulas=nebulas;
+    clouds=savedClouds; birds=savedBirds; leaves=savedLeaves;
+    snowflakes=savedSnow; stars=savedStars; nebulas=savedNebulas;
+
     transOldIdx=stageIdx; stageIdx=newIdx; transProgress=0;
-    initSceneElements(STAGES[newIdx].id); obstacles=[];
+    obstacles=[];
+
+    // Store new scene data to swap in when transition finishes
+    pendingScene = { clouds:newClouds, birds:newBirds, leaves:newLeaves,
+                     snowflakes:newSnow, stars:newStars, nebulas:newNebulas };
+
     const s=STAGES[newIdx]; stageEl.textContent=s.icon+' '+s.name;
     const cols={spring:'#4ade80',beach:'#fbbf24',autumn:'#f97316',winter:'#bae6fd',night:'#60a5fa',space:'#a78bfa'};
     stageEl.style.color=cols[s.id]||'#94a3b8';
@@ -419,11 +445,26 @@ function loop(){
     if(transProgress<1){
         transProgress=Math.min(1,transProgress+TRANS_SPEED);
         const t=easeInOut(transProgress), slide=Math.round(t*W);
-        // offA is a frozen snapshot of old stage — don't redraw it
-        ctxB.clearRect(0,0,W,H); renderBg(ctxB,STAGES[stageIdx].id,mountainX,groundX);
+        // offA = frozen old stage. offB = re-render new stage with its fresh data
+        const curId=STAGES[stageIdx].id;
+        // Temporarily swap to new scene data to render offB correctly
+        if(pendingScene){
+            const sc=pendingScene;
+            const oc=clouds,ob=birds,ol=leaves,os=snowflakes,ost=stars,on=nebulas;
+            clouds=sc.clouds; birds=sc.birds; leaves=sc.leaves;
+            snowflakes=sc.snowflakes; stars=sc.stars; nebulas=sc.nebulas;
+            ctxB.clearRect(0,0,W,H); renderBg(ctxB,curId,mountainX,groundX);
+            clouds=oc; birds=ob; leaves=ol; snowflakes=os; stars=ost; nebulas=on;
+        }
         ctx.drawImage(offA,0,0);
         ctx.save(); ctx.beginPath(); ctx.rect(W-slide,0,slide,H); ctx.clip(); ctx.drawImage(offB,0,0); ctx.restore();
-        if(slide>0&&slide<W){ ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(W-slide,0); ctx.lineTo(W-slide,H); ctx.stroke(); }
+        if(slide>0&&slide<W){ ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(W-slide,0); ctx.lineTo(W-slide,H); ctx.stroke(); }
+        // When transition finishes, swap scene data to new stage
+        if(transProgress>=1 && pendingScene){
+            clouds=pendingScene.clouds; birds=pendingScene.birds; leaves=pendingScene.leaves;
+            snowflakes=pendingScene.snowflakes; stars=pendingScene.stars; nebulas=pendingScene.nebulas;
+            pendingScene=null;
+        }
     } else { renderBg(ctx,STAGES[stageIdx].id,mountainX,groundX); }
 
     if(curId==='winter'&&transProgress>=1){ snowflakes.forEach(s=>{ s.y+=s.spd; s.x+=s.drift+Math.sin(s.phase+frame*.03)*.4; if(s.y>GROUND+R.h+10){s.y=0;s.x=Math.random()*W;} if(s.x>W)s.x=0; if(s.x<0)s.x=W; ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }); }
