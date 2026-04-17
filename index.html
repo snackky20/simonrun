@@ -305,6 +305,8 @@ function showWarning(l){ const m=WARN_MSGS[l]; if(m) warnMsg={text:m,life:1.0}; 
 function triggerTransition(newIdx){
     if(newIdx>=STAGES.length) return;
     if(newIdx===5){ startAbduction(); return; }
+    // Snapshot the CURRENT stage into offA RIGHT NOW before anything changes
+    renderBg(ctxA, STAGES[stageIdx].id, mountainX, groundX);
     transOldIdx=stageIdx; stageIdx=newIdx; transProgress=0;
     initSceneElements(STAGES[newIdx].id); obstacles=[];
     const s=STAGES[newIdx]; stageEl.textContent=s.icon+' '+s.name;
@@ -417,12 +419,12 @@ function loop(){
     if(transProgress<1){
         transProgress=Math.min(1,transProgress+TRANS_SPEED);
         const t=easeInOut(transProgress), slide=Math.round(t*W);
-        ctxA.clearRect(0,0,W,H); renderBg(ctxA,prevId,mountainX,groundX);
-        ctxB.clearRect(0,0,W,H); renderBg(ctxB,curId,mountainX,groundX);
+        // offA is a frozen snapshot of old stage — don't redraw it
+        ctxB.clearRect(0,0,W,H); renderBg(ctxB,STAGES[stageIdx].id,mountainX,groundX);
         ctx.drawImage(offA,0,0);
         ctx.save(); ctx.beginPath(); ctx.rect(W-slide,0,slide,H); ctx.clip(); ctx.drawImage(offB,0,0); ctx.restore();
-        if(slide>0&&slide<W){ ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(W-slide,0); ctx.lineTo(W-slide,H); ctx.stroke(); }
-    } else { renderBg(ctx,curId,mountainX,groundX); }
+        if(slide>0&&slide<W){ ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(W-slide,0); ctx.lineTo(W-slide,H); ctx.stroke(); }
+    } else { renderBg(ctx,STAGES[stageIdx].id,mountainX,groundX); }
 
     if(curId==='winter'&&transProgress>=1){ snowflakes.forEach(s=>{ s.y+=s.spd; s.x+=s.drift+Math.sin(s.phase+frame*.03)*.4; if(s.y>GROUND+R.h+10){s.y=0;s.x=Math.random()*W;} if(s.x>W)s.x=0; if(s.x<0)s.x=W; ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }); }
     if(curId==='autumn'&&transProgress>=1){ leaves.forEach((l,i)=>{ l.x+=l.vx; l.y+=l.vy; l.vy+=.04; l.phase+=.06; l.x+=Math.sin(l.phase)*.5; if(l.y>GROUND+R.h||l.x<-20){leaves[i]=mkLeaf(false);return;} ctx.fillStyle=l.color; ctx.save(); ctx.translate(l.x,l.y); ctx.rotate(l.phase*.5); ctx.beginPath(); ctx.ellipse(0,0,l.size,l.size*.5,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }); }
